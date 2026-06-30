@@ -168,14 +168,21 @@ func buildPostgresDSN(cfg *DatabaseConfig, dbName string) string {
 }
 
 func buildDatabaseConnectionDSNs(cfg *DatabaseConfig) (bootstrapDSN, targetDSN string) {
-	return buildPostgresDSN(cfg, "postgres"), buildPostgresDSN(cfg, cfg.DBName)
+	// 优先使用 DATABASE_DBNAME 作为 bootstrap 连接库名，
+	// 兼容云托管 PostgreSQL 无默认 postgres 库的场景。
+	// 当 DATABASE_DBNAME 为空时回退到 "postgres"（标准安装）。
+	bootstrapDB := cfg.DBName
+	if bootstrapDB == "" {
+		bootstrapDB = "postgres"
+	}
+	return buildPostgresDSN(cfg, bootstrapDB), buildPostgresDSN(cfg, cfg.DBName)
 }
 
 // TestDatabaseConnection tests the database connection and creates database if not exists
 func TestDatabaseConnection(cfg *DatabaseConfig) error {
-	// First, connect to the default 'postgres' database to check/create target database.
-	// Connecting to cfg.DBName here fails when the target database has not been
-	// created yet, so the bootstrap connection must use PostgreSQL's maintenance DB.
+	// 先通过 buildDatabaseConnectionDSNs 获取 bootstrap DSN 检查/创建目标库。
+	// 若 DATABASE_DBNAME 已配置，bootstrap 直接连目标库（兼容云托管无 postgres 库）；
+	// 若 DATABASE_DBNAME 为空则回退到 "postgres"（标准安装）。
 	defaultDSN, targetDSN := buildDatabaseConnectionDSNs(cfg)
 
 	db, err := sql.Open("postgres", defaultDSN)

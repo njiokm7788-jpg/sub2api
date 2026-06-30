@@ -88,7 +88,8 @@ func TestWriteConfigFileKeepsDefaultUserConcurrency(t *testing.T) {
 	}
 }
 
-func TestBuildDatabaseConnectionDSNsUsesPostgresForBootstrap(t *testing.T) {
+func TestBuildDatabaseConnectionDSNsBootstrapFallback(t *testing.T) {
+	// 场景1：DATABASE_DBNAME 已设置 → bootstrap 使用目标库名
 	cfg := &DatabaseConfig{
 		Host:     "db",
 		Port:     5432,
@@ -100,13 +101,29 @@ func TestBuildDatabaseConnectionDSNsUsesPostgresForBootstrap(t *testing.T) {
 
 	bootstrapDSN, targetDSN := buildDatabaseConnectionDSNs(cfg)
 
-	if !strings.Contains(bootstrapDSN, "dbname=postgres") {
-		t.Fatalf("bootstrap DSN = %q, want default postgres database", bootstrapDSN)
-	}
-	if strings.Contains(bootstrapDSN, "dbname=sub2api") {
-		t.Fatalf("bootstrap DSN = %q, should not connect to target database before checking/creating it", bootstrapDSN)
+	if !strings.Contains(bootstrapDSN, "dbname=sub2api") {
+		t.Fatalf("bootstrap DSN = %q, want configured dbname when DBName is set", bootstrapDSN)
 	}
 	if !strings.Contains(targetDSN, "dbname=sub2api") {
 		t.Fatalf("target DSN = %q, want configured database", targetDSN)
+	}
+
+	// 场景2：DATABASE_DBNAME 为空 → bootstrap 回退到 postgres
+	cfg2 := &DatabaseConfig{
+		Host:     "db",
+		Port:     5432,
+		User:     "sub2api",
+		Password: "secret",
+		DBName:   "",
+		SSLMode:  "disable",
+	}
+
+	bootstrapDSN2, targetDSN2 := buildDatabaseConnectionDSNs(cfg2)
+
+	if !strings.Contains(bootstrapDSN2, "dbname=postgres") {
+		t.Fatalf("bootstrap DSN = %q, want fallback postgres when DBName is empty", bootstrapDSN2)
+	}
+	if !strings.Contains(targetDSN2, "dbname=") {
+		t.Fatalf("target DSN = %q, want dbname in DSN", targetDSN2)
 	}
 }
